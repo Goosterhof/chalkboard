@@ -1,0 +1,16 @@
+{
+  "tracked_repos": [
+    { "name": "emmie-app", "owner": "emmie-app", "repo": "emmie" },
+    { "name": "kendo", "owner": "script-development", "repo": "kendo" },
+    { "name": "ubl-genie", "owner": "Back-to-code", "repo": "ublgenie-app" },
+    { "name": "war-room", "owner": "Goosterhof", "repo": "war-room" },
+    { "name": "zmuuzn", "owner": "Goosterhof", "repo": "zmuuzn" }
+  ],
+  "commits_per_repo": 6,
+  "refresh_minutes": 10,
+  "gh_timeout_seconds": 20,
+  "output_path": "%LOCALAPPDATA%\\chalkboard\\current.png",
+  "log_path": "%LOCALAPPDATA%\\chalkboard\\chalkboard.log",
+  "lock_path": "%LOCALAPPDATA%\\chalkboard\\chalkboard.lock",
+  "font_path": "C:\\Windows\\Fonts\\CascadiaMono.ttf"
+}
