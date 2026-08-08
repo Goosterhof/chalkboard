@@ -3,15 +3,20 @@
 > *A scientist's chalkboard: erased and rewritten every cycle with fresh readings, never a static report.*
 
 The Chalkboard is a Windows desktop wallpaper that regenerates itself on a
-timer with a live dashboard: your open pull requests, the PRs waiting on
-your review, and recent commit activity across a tracked list of
-repositories. Nothing survives underneath it — the background *is* the
-readout.
+timer with a live dashboard: your open pull requests (with check and
+review status), the PRs waiting on your review, and 14-day commit
+sparklines across a tracked list of repositories. Nothing survives
+underneath it — the background *is* the readout.
+
+And it looks like its name: a café blackboard. Black slate with eraser
+smudges, tall chalk caps, dotted menu leaders running out to PR ages like
+prices, hand-drawn check marks, yellow chalk sparklines. The board texture
+is re-seeded every cycle, so each rewrite leaves fresh eraser history.
 
 It has no server, no database, no login. It shells out to your already-
-authenticated `gh` CLI, draws a PNG with Pillow, and applies it as the
-desktop background via a Windows API call. Windows Task Scheduler is the
-only thing keeping it alive.
+authenticated `gh` CLI, draws a PNG with Pillow + numpy, and applies it as
+the desktop background via a Windows API call. Windows Task Scheduler is
+the only thing keeping it alive.
 
 ## Setup
 
@@ -54,13 +59,17 @@ want one back.
 
 ## Configuration
 
-Everything lives in `config.json` — tracked repos, refresh interval, output
-paths, font. See `CLAUDE.md` for the full schema and architecture notes.
+Everything lives in `config.json` — tracked repos, refresh interval,
+sparkline window, output paths, bundled font dir, and the optional Kendo
+chef's-note seam. See `CLAUDE.md` for the full schema and architecture
+notes.
 
 ## Known limitations
 
 - Primary monitor only.
-- No CI/Sentinel yet — this is a fresh v1.
+- No CI/Sentinel yet.
+- The Kendo chef's note is a disabled seam until a token and
+  `counts_command` are provisioned.
 - No multi-language support; the panel is English-only.
 
 See `CLAUDE.md` for the full architecture writeup and design rationale.

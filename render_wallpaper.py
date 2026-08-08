@@ -3,6 +3,8 @@
 Run manually with `python render_wallpaper.py`, or `--mock` to render from
 the fixture in fetch_data.mock_data() without touching `gh` or the network.
 Windows Task Scheduler calls this on a timer — see scripts/install-task.ps1.
+On non-Windows hosts (bench previews) locking and wallpaper application are
+skipped and the PNG lands at output_path for inspection.
 """
 
 import json
@@ -15,12 +17,15 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
-import msvcrt  # noqa: E402  (Windows-only; this gadget never runs elsewhere)
+IS_WINDOWS = os.name == "nt"
+if IS_WINDOWS:
+    import msvcrt
 
 from fetch_data import (  # noqa: E402
     ChalkboardFetchError,
+    get_kendo_counts,
     get_my_open_prs,
-    get_repo_commits,
+    get_repo_activity,
     get_review_requested_prs,
     mock_data,
 )
@@ -40,6 +45,8 @@ def expand(path_str):
 
 
 def acquire_lock(lock_path):
+    if not IS_WINDOWS:
+        return "no-lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fh = open(lock_path, "a+")
     try:
@@ -51,7 +58,7 @@ def acquire_lock(lock_path):
 
 
 def release_lock(lock_fh):
-    if lock_fh is None:
+    if lock_fh is None or lock_fh == "no-lock":
         return
     lock_fh.seek(0)
     try:
@@ -61,26 +68,35 @@ def release_lock(lock_fh):
     lock_fh.close()
 
 
+def make_stamp():
+    return time.strftime("%a %-d %b · rechalked %H:%M" if os.name != "nt"
+                         else "%a %#d %b · rechalked %H:%M").upper()
+
+
 def collect(config):
-    my_prs = get_my_open_prs(config.get("gh_timeout_seconds", 20))
-    review_prs = get_review_requested_prs(config.get("gh_timeout_seconds", 20))
-    commits = {}
+    timeout = config.get("gh_timeout_seconds", 20)
+    my_prs = get_my_open_prs(timeout)
+    review_prs = get_review_requested_prs(timeout, config.get("ignore_bot_reviews", True))
+    activity, last_commit = {}, {}
     for repo in config["tracked_repos"]:
         try:
-            commits[repo["name"]] = get_repo_commits(
-                repo["owner"],
-                repo["repo"],
-                config.get("commits_per_repo", 6),
-                config.get("gh_timeout_seconds", 20),
+            buckets, last = get_repo_activity(
+                repo["owner"], repo["repo"],
+                config.get("activity_days", 14), timeout,
             )
         except ChalkboardFetchError as exc:
-            logging.warning("Commit fetch failed for %s: %s", repo["name"], exc)
-            commits[repo["name"]] = []
+            logging.warning("Activity fetch failed for %s: %s", repo["name"], exc)
+            buckets, last = [], None
+        activity[repo["name"]] = buckets
+        if last:
+            last_commit[repo["name"]] = last
     return {
         "my_prs": my_prs,
         "review_prs": review_prs,
-        "commits": commits,
-        "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "activity": activity,
+        "last_commit": last_commit,
+        "kendo": get_kendo_counts(config.get("kendo"), timeout),
+        "stamp": make_stamp(),
     }
 
 
@@ -111,10 +127,10 @@ def main():
         set_wallpaper(output_path)
 
         logging.info(
-            "Chalked the desktop — %d PRs authored, %d review requests, %d repos tracked.",
+            "Chalked the desktop — %d PRs authored, %d review requests, %d repos on the board.",
             len(data["my_prs"]),
             len(data["review_prs"]),
-            len(data["commits"]),
+            len(data["activity"]),
         )
     except ChalkboardFetchError as exc:
         logging.warning("Fetch failed, keeping the last chalked image: %s", exc)
