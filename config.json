@@ -19,6 +19,7 @@
   "output_path": "%LOCALAPPDATA%\\chalkboard\\current.png",
   "log_path": "%LOCALAPPDATA%\\chalkboard\\chalkboard.log",
   "lock_path": "%LOCALAPPDATA%\\chalkboard\\chalkboard.lock",
+  "state_path": "%LOCALAPPDATA%\\chalkboard\\state.json",
   "font_dir": "fonts",
   "preview_size": [2560, 1440],
   "kendo": {

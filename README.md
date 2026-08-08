@@ -55,7 +55,8 @@ want one back.
 
 - Windows (uses `ctypes.windll` and `msvcrt` — this gadget is Windows-only
   by design)
-- Python 3.11+
+- Python 3.11+ with the packages from `requirements.txt` (Pillow, numpy,
+  psutil)
 - [GitHub CLI](https://cli.github.com/) (`gh`), already authenticated
   (`gh auth status`)
 

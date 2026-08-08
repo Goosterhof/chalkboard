@@ -126,6 +126,17 @@ class ChalkLayer:
                 hi = mid
         return s[: max(lo - 1, 0)] + "…"
 
+    def truncate_words(self, s, font, max_width):
+        """Like truncate, but cuts at the last whole word — "fix: corr…" says
+        nothing, "fix: correct…" says something."""
+        cut = self.truncate(s, font, max_width)
+        if cut == s:
+            return s
+        body = cut[:-1].rstrip()
+        if " " in body:
+            body = body.rsplit(" ", 1)[0].rstrip("—-·,:;")
+        return body.rstrip() + "…"
+
     # -- wobbly geometry ----------------------------------------------------
     def _wobble(self, pts, wobble=2.2, step=16):
         """Subdivide a polyline and push points around like a hand would."""

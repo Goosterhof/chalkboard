@@ -66,11 +66,18 @@ Windows Task Scheduler — "Chalkboard" task, fires every config.json's
 
 No persistent background process. Each run: acquire a file lock (via
 `msvcrt`, so an overrun previous cycle can't stack with the next
-Task-Scheduler trigger) → fetch → render → apply → release lock → exit. A
-fetch failure logs a warning and leaves the last chalked PNG in place
-rather than blanking or crashing the desktop. The board texture is
-re-seeded every cycle, so each rechalking leaves slightly different eraser
-history — the surface itself says "rewritten".
+Task-Scheduler trigger) → fetch → render → apply → release lock → exit.
+The board texture is re-seeded every cycle, so each rechalking leaves
+slightly different eraser history — the surface itself says "rewritten".
+
+**A failed cycle admits it on the wall** (chaos #00110 D3): instead of
+leaving the old PNG up with a confidently wrong timestamp, the subtitle
+line of the last board is erased and re-chalked in rose —
+`~ SERVICE PAUSED · LAST CHALKED 14:12 · GH WENT QUIET ~` (fetch failure)
+or `THE KITCHEN HIT A SNAG` (anything else) — and an eraser smudge grows
+over the specials with every silent cycle. Cycle memory (last successful
+stamp + consecutive-pause count) persists in `state_path`; a healthy cycle
+resets it. If no board exists yet, nothing is touched.
 
 ## File layout
 
@@ -83,7 +90,7 @@ chalkboard/
 ├── render.py              — menu-board layout renderer
 ├── set_wallpaper.py       — SystemParametersInfoW wrapper
 ├── render_wallpaper.py    — entry point (lock → fetch → render → set)
-├── requirements.txt       — Pillow, numpy
+├── requirements.txt       — Pillow, numpy, psutil
 ├── fonts/                 — bundled OFL faces: Amatic SC 400/700 (chalk
 │                            caps), Caveat 500 (script hand) + OFL licences.
 │                            Bundled because Windows ships neither; Caveat
@@ -124,8 +131,10 @@ chalkboard/
   5000/hr authenticated ceiling).
 - `gh_timeout_seconds` — subprocess timeout per `gh` call, so a hung
   network doesn't stack Task Scheduler runs on top of each other.
-- `output_path` / `log_path` / `lock_path` — `%LOCALAPPDATA%\chalkboard\`
-  by default; `os.path.expandvars` resolves the env var at runtime.
+- `output_path` / `log_path` / `lock_path` / `state_path` —
+  `%LOCALAPPDATA%\chalkboard\` by default; `os.path.expandvars` resolves
+  the env var at runtime. `state_path` carries the cycle memory the
+  service-pause stamp is written from.
 - `font_dir` — repo-relative directory with the bundled TTFs. Falls back to
   PIL's bitmap default font with a logged warning if a face is missing —
   the panel still renders, just uglier.
@@ -167,8 +176,12 @@ somewhere inspectable and look at pixels.
 - **Authored PRs** — `gh search prs --author=@me --state=open`, newest
   first, then one `gh pr view --json statusCheckRollup,reviewDecision` per
   displayed PR (capped at 4) for the check mark (mint ✓ green / rose ✗ red /
-  yellow ~ pending) and the review line (`approved`, `changes requested`,
-  `waiting for review`).
+  yellow ~ pending / a dim `?` when the detail fetch itself failed — the
+  board says "I couldn't read this one" rather than dressing it as no-CI)
+  and the review line in the board's own kitchen vocabulary: `plated`
+  (approved), `sent back` (changes requested), `still on the pass`
+  (waiting) — GitHub's words made the CI tick read as review approval
+  (chaos #00110 D2).
 - **Review requests** — `gh search prs --review-requested=@me` with author
   and age, bot authors filtered (see `ignore_bot_reviews`), longest-waiting
   first; the authored column runs newest-first.
@@ -177,7 +190,11 @@ somewhere inspectable and look at pixels.
   silent 100 cap — the sparklines flatlined at exactly 100 before this; and
   `--paginate --slurp` doesn't exist on every installed gh, so page numbers
   it is), bucketed locally into daily counts; the newest commit feeds the
-  "N this week — message" line under each regular's sparkline.
+  "N/wk — message" caption under each regular's sparkline. The message
+  tail is truncated on a word boundary and rides along only when at least
+  one whole word of it fits the slot — narrow slots (pantry on, small
+  screens) show the count alone rather than a useless ellipsis
+  (chaos #00110 D1).
 - Ages are humanized (`5h`, `2d`) from `createdAt` — menu prices, not
   timestamps.
 

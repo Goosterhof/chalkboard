@@ -64,16 +64,22 @@ def _summarize_checks(rollup):
     return "green"
 
 
+# Review state in the board's own vocabulary — kitchen terms, not GitHub's.
+# The CI tick was reading as review approval when the words next to it said
+# "waiting for review" (chaos #00110 D2); the menu voice keeps the two axes
+# from wearing each other's clothes.
 _REVIEW_TEXT = {
-    "APPROVED": "approved",
-    "CHANGES_REQUESTED": "changes requested",
-    "REVIEW_REQUIRED": "waiting for review",
+    "APPROVED": "plated",
+    "CHANGES_REQUESTED": "sent back",
+    "REVIEW_REQUIRED": "still on the pass",
 }
 
 
 def _pr_detail(name_with_owner, number, timeout_seconds):
     """Per-PR check + review status. One extra call per open PR — the
-    authored list is short, so this stays well under a cycle budget."""
+    authored list is short, so this stays well under a cycle budget.
+    A failed detail fetch is "unknown", never "none" — the board must be
+    able to say "I couldn't read this one" (chaos #00110 D7)."""
     try:
         detail = _run_gh(
             ["pr", "view", str(number), "--repo", name_with_owner,
@@ -82,7 +88,7 @@ def _pr_detail(name_with_owner, number, timeout_seconds):
         )
     except ChalkboardFetchError as exc:
         logging.warning("PR detail fetch failed for %s#%s: %s", name_with_owner, number, exc)
-        return "none", ""
+        return "unknown", ""
     checks = _summarize_checks(detail.get("statusCheckRollup"))
     review = _REVIEW_TEXT.get(detail.get("reviewDecision") or "", "")
     return checks, review
@@ -254,11 +260,11 @@ def mock_data():
     return {
         "my_prs": [
             {"repo": "kendo", "number": 412, "title": "Add sprint velocity chart to the report tool",
-             "age": "2d", "checks": "green", "review": "approved"},
+             "age": "2d", "checks": "green", "review": "plated"},
             {"repo": "zmuuzn", "number": 108, "title": "Graft The Chalkboard gadget",
-             "age": "5h", "checks": "pending", "review": "waiting for review"},
+             "age": "5h", "checks": "unknown", "review": "still on the pass"},
             {"repo": "war-room", "number": 51, "title": "Territory clock drift fix for the general's map",
-             "age": "1d", "checks": "red", "review": "changes requested"},
+             "age": "1d", "checks": "red", "review": "sent back"},
         ],
         "review_prs": [
             {"repo": "emmie-app", "number": 233, "title": "Cohort export: stream instead of buffering",
@@ -291,5 +297,5 @@ def mock_data():
             ],
             "uptime": "6d 4h",
         },
-        "stamp": "FRI 8 AUG · RECHALKED 16:20",
+        "stamp": "SAT 8 AUG · RECHALKED 16:20",
     }

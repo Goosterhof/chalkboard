@@ -30,7 +30,7 @@ from fetch_data import (  # noqa: E402
     get_review_requested_prs,
     mock_data,
 )
-from render import render_dashboard  # noqa: E402
+from render import chalk_service_pause, render_dashboard  # noqa: E402
 from set_wallpaper import set_wallpaper  # noqa: E402
 
 CONFIG_PATH = BASE_DIR / "config.json"
@@ -39,6 +39,37 @@ CONFIG_PATH = BASE_DIR / "config.json"
 def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_state(state_path):
+    """Cycle memory: the last successful chalking time and how many cycles
+    have failed since — what the service-pause stamp is written from."""
+    try:
+        with open(state_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_state(state_path, state):
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except OSError as exc:
+        logging.warning("Couldn't persist cycle state: %s", exc)
+
+
+def mark_paused(config, output_path, state_path, state, reason):
+    """A failed cycle must not leave a confidently wrong timestamp on the
+    wall (chaos #00110 D3) — restamp the old board as paused and re-apply."""
+    pauses = state.get("pauses", 0) + 1
+    save_state(state_path, {**state, "pauses": pauses})
+    try:
+        if chalk_service_pause(output_path, config, state.get("last_stamp", "?"), pauses, reason):
+            set_wallpaper(output_path)
+    except Exception:
+        logging.exception("Couldn't chalk the service-pause notice.")
 
 
 def expand(path_str):
@@ -120,13 +151,17 @@ def main():
         logging.info("Previous chalking cycle still in flight — skipping this one.")
         return
 
+    output_path = expand(config["output_path"])
+    state_path = expand(config.get("state_path", "%LOCALAPPDATA%\\chalkboard\\state.json"))
+    state = load_state(state_path)
+
     try:
         data = mock_data() if "--mock" in sys.argv else collect(config)
 
-        output_path = expand(config["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
         render_dashboard(data, config, output_path)
         set_wallpaper(output_path)
+        save_state(state_path, {"last_stamp": time.strftime("%H:%M"), "pauses": 0})
 
         logging.info(
             "Chalked the desktop — %d PRs authored, %d review requests, %d repos on the board.",
@@ -135,9 +170,11 @@ def main():
             len(data["activity"]),
         )
     except ChalkboardFetchError as exc:
-        logging.warning("Fetch failed, keeping the last chalked image: %s", exc)
+        logging.warning("Fetch failed — restamping the board as paused: %s", exc)
+        mark_paused(config, output_path, state_path, state, "GH WENT QUIET")
     except Exception:
-        logging.exception("Unhandled failure during chalking cycle.")
+        logging.exception("Unhandled failure during chalking cycle — restamping the board as paused.")
+        mark_paused(config, output_path, state_path, state, "THE KITCHEN HIT A SNAG")
     finally:
         release_lock(lock_fh)
 
