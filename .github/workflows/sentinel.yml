@@ -1,0 +1,59 @@
+name: Sentinel
+
+# The Chalkboard's containment gate. The gadget has no test suite by design —
+# its honest end-to-end gate is the kitchen itself: every script must parse,
+# and every mock service (full board, empty bench, register stress) must
+# plate a PNG at spec without touching gh or the network.
+# Bench note: on non-Windows hosts %LOCALAPPDATA% never expands, so the board
+# lands under the LITERAL '%LOCALAPPDATA%\chalkboard\current.png' filename —
+# that is expected bench-preview behaviour, not a bug (see CLAUDE.md).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  chalk:
+    name: "Chalk — Compile + Mock Render"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Stock the kitchen
+        run: pip install -r requirements.txt
+
+      - name: Every script parses
+        run: python -m compileall -q .
+
+      - name: "Service one — the fixture menu chalks a full board"
+        run: |
+          python render_wallpaper.py --mock
+          mv '%LOCALAPPDATA%\chalkboard\current.png' board-mock.png
+
+      - name: "Service two — the empty bench still gets a board"
+        run: |
+          python render_wallpaper.py --mock-bare
+          mv '%LOCALAPPDATA%\chalkboard\current.png' board-bare.png
+
+      - name: "Service three — five candidates crowd a three-slot register"
+        run: |
+          python render_wallpaper.py --mock-loud
+          mv '%LOCALAPPDATA%\chalkboard\current.png' board-loud.png
+
+      - name: Every board left the kitchen at spec
+        run: |
+          python - <<'PY'
+          import json
+          from PIL import Image
+          want = tuple(json.load(open("config.json"))["preview_size"])
+          for board in ("board-mock.png", "board-bare.png", "board-loud.png"):
+              im = Image.open(board)
+              assert im.size == want, f"{board} came out {im.size}, the menu says {want}"
+              print(f"{board}: chalked {im.size[0]}x{im.size[1]} {im.mode}")
+          PY

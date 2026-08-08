@@ -171,6 +171,33 @@ On a non-Windows bench, `render_wallpaper.py --mock` renders at
 fastest way to iterate on `render.py`/`chalk.py` is to point `output_path`
 somewhere inspectable and look at pixels.
 
+## The Sentinel (containment gates)
+
+Armed 2026-08-08 — `.github/workflows/sentinel.yml`, the fourth public
+gadget Sentinel. `main` is branch-protected behind it: PR only, the
+`Chalk — Compile + Mock Render` check required, enforced for admins.
+Submodule PRs merge with **merge commits** (lab gadget policy, Decision
+025) so the PR branch tip survives as an ancestor of `main` and the parent
+gitlink can never dangle.
+
+The gadget has no test suite by design — the honest gate is the kitchen
+itself, run on every PR and every push to `main`:
+
+```
+pip install -r requirements.txt
+python -m compileall -q .                # every script parses
+python render_wallpaper.py --mock        # service one: full fixture board
+python render_wallpaper.py --mock-bare   # service two: the empty bench
+python render_wallpaper.py --mock-loud   # service three: register stress
+# every board PIL-asserted at preview_size (2560×1440)
+```
+
+Bench note the workflow relies on: off-Windows, `%LOCALAPPDATA%` never
+expands, so each board lands under the *literal*
+`'%LOCALAPPDATA%\chalkboard\current.png'` filename; the workflow renames
+each plate before the next service. Run the same five commands in a venv
+as the local pre-push gate.
+
 ## Fetch surface (v2)
 
 - **Authored PRs** — `gh search prs --author=@me --state=open`, newest
@@ -269,8 +296,6 @@ patterns), eyes open about the 24H2-class fragility. Rung 2
 
 - Primary monitor only — `GetSystemMetrics(0/1)` ignores multi-monitor
   setups.
-- No Sentinel/CI yet — not a candidate for the public-repo Sentinel roster
-  until it earns one.
 - Layout is static/grid-based by design: 3 PRs per column (an overflow
   line names how many more), sparkline slots split the width evenly.
   Revisit if the review queue regularly overflows.
