@@ -24,6 +24,7 @@ if IS_WINDOWS:
 from fetch_data import (  # noqa: E402
     ChalkboardFetchError,
     get_kendo_counts,
+    get_machine_specs,
     get_my_open_prs,
     get_repo_activity,
     get_review_requested_prs,
@@ -96,6 +97,7 @@ def collect(config):
         "activity": activity,
         "last_commit": last_commit,
         "kendo": get_kendo_counts(config.get("kendo"), timeout),
+        "pantry": get_machine_specs(config.get("pantry")),
         "stamp": make_stamp(),
     }
 

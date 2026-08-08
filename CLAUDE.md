@@ -43,7 +43,9 @@ render_wallpaper.py   — entry point: lock → fetch → render → set wallpap
    │                     PRs, per-repo 14-day commit buckets + newest
    │                     commit. Raises ChalkboardFetchError on any failure
    │                     so the caller can bail without touching the
-   │                     wallpaper. Also carries the Kendo seam (below).
+   │                     wallpaper. Also carries the Kendo seam (below) and
+   │                     THE PANTRY collector (psutil: memory, disks,
+   │                     uptime — no gh involved).
    ├─ render.py        — the menu-board composition: layout in 2560×1440
    │                     design units, scaled to the actual primary screen
    │                     (ctypes GetSystemMetrics; `preview_size` fallback
@@ -105,9 +107,21 @@ chalkboard/
 - `ignore_bot_reviews` — default `true`: drops `*[bot]` authors (read:
   dependabot) from the review queue so the humans waiting on you aren't
   buried under the bot tail. The authored column is never filtered.
+- `pantry` — the machine-stock panel:
+  `{"enabled": bool, "disks": [{"path": "C:\\", "label": "CELLAR C:"}]}`.
+  Renders memory used/total, up to 2 disks (free GB), and uptime
+  (`STOVE ON … 6d 4h`) as chalk stock-bars on the right of the bottom
+  band; a shelf over 85 % full hatches rose instead of yellow. THE REGULARS
+  shrinks to make room — with the pantry off, the sparklines take the full
+  width back. Deliberately **no CPU%**: on a minutes-cadence board a CPU
+  number is one stale sample wearing a live gauge's costume — fast gauges
+  wait for the living board (v3, below). An unreadable disk path logs and
+  is skipped; a missing psutil shuts the whole pantry with a warning.
 - `refresh_minutes` — read by `scripts/install-task.ps1` when registering
   the scheduled task; changing it requires re-running the install script.
-  Also chalked into the footer rail.
+  Also chalked into the footer rail. Dropped 10 → 3 with v2.5 (a full
+  cycle is ~16 gh requests — ~320/hr at this cadence, far under the
+  5000/hr authenticated ceiling).
 - `gh_timeout_seconds` — subprocess timeout per `gh` call, so a hung
   network doesn't stack Task Scheduler runs on top of each other.
 - `output_path` / `log_path` / `lock_path` — `%LOCALAPPDATA%\chalkboard\`
@@ -166,6 +180,43 @@ somewhere inspectable and look at pixels.
   "N this week — message" line under each regular's sparkline.
 - Ages are humanized (`5h`, `2d`) from `createdAt` — menu prices, not
   timestamps.
+
+## The Living Board (v3 — written down, not started)
+
+The investor asked what a Windows background can actually *be* (2026-08-08).
+The answer is a ladder, and v2.x sits on the bottom rung by design:
+
+1. **PNG swap via `SystemParametersInfoW`** (current). Refresh floor is
+   minutes; each swap rewrites the transcoded wallpaper and broadcasts a
+   settings change. Can never animate — only be a fresher photograph.
+2. **`IDesktopWallpaper` COM** — supported API, per-monitor wallpapers +
+   slideshow control. Fixes the primary-monitor-only limitation without
+   changing the architecture. Cheap; take alongside any other rung.
+3. **The WorkerW trick** — message `0x052C` to Progman spawns a WorkerW
+   layer between wallpaper and desktop icons; re-parent a real window
+   (WebView2/canvas/WebGL) into it and the background becomes a *running
+   surface*: self-drawing chalk strokes, drifting dust, breathing gauges,
+   live CPU/network — everything the pantry deliberately refuses today.
+   This is how Wallpaper Engine and Lively do it. **The tax:** it is an
+   undocumented hack. Windows 11 24H2 broke it (WorkerW stopped existing
+   at startup; Microsoft placed a compatibility hold on machines running
+   wallpaper customizers) until the January 2025 fixes (KB5050009 /
+   KB5050094). Stable since, guaranteed never. A living board must also
+   pause itself when a fullscreen app/game is up.
+4. **Desktop-pinned widget window** (the Rainmeter model) — borderless,
+   non-activating, always-at-bottom. Fully supported APIs, coexists with a
+   normal wallpaper; but sits *over* the wallpaper and under the icons
+   rather than being the background.
+
+**The chosen v3 path when the time comes:** prototype the board as a local
+HTML/canvas page hosted by **Lively Wallpaper** (open source, has a CLI,
+owns the WorkerW mess + 24H2 patches + pause-on-fullscreen + multi-monitor)
+— the chalk aesthetic ports to canvas with the same bundled fonts, and the
+prototype proves what "alive" feels like without the lab owning the ledge.
+If it earns permanence, the same page moves into a Tauri v2 window the lab
+parents into WorkerW itself (Mezzanine already carries the Tauri
+patterns), eyes open about the 24H2-class fragility. Rung 2
+(`IDesktopWallpaper`) is worth taking in either future.
 
 ## Known limitations (v2)
 

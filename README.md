@@ -4,9 +4,11 @@
 
 The Chalkboard is a Windows desktop wallpaper that regenerates itself on a
 timer with a live dashboard: your open pull requests (with check and
-review status), the PRs waiting on your review, and 14-day commit
-sparklines across a tracked list of repositories. Nothing survives
-underneath it — the background *is* the readout.
+review status), the PRs waiting on your review, 14-day commit sparklines
+across a tracked list of repositories, and THE PANTRY — the machine's own
+stock (memory, disk, uptime) as hand-drawn chalk gauges that hatch rose
+when supplies run low. Nothing survives underneath it — the background
+*is* the readout.
 
 And it looks like its name: a café blackboard. Black slate with eraser
 smudges, tall chalk caps, dotted menu leaders running out to PR ages like

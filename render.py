@@ -135,26 +135,65 @@ def render_dashboard(data, config, output_path):
         y += row_h
     overflow_note(col_rx, y, len(data["review_prs"]) - MAX_PRS_PER_SECTION)
 
-    # ------------------------------------------------------ the regulars
+    # --------------------------------------- the regulars + the pantry
     div_y = 904 * s
     Lw.line([(cx - 430 * s, div_y), (cx + 430 * s, div_y)], width=max(2, int(4 * s)), wobble=2.2, alpha=200)
     Lw.line([(cx - 310 * s, div_y + 12 * s), (cx + 310 * s, div_y + 12 * s)], width=max(2, int(3 * s)), wobble=2.0, alpha=150)
-    centered(Ly, 928 * s, "THE REGULARS", head_f)
+
+    pantry = data.get("pantry")
+    reg_x0 = int(180 * s)
+    reg_x1 = width - int(840 * s) if pantry else width - int(180 * s)
+
+    def zone_heading(layer, x0, x1, text):
+        w_ = layer.text_len(text, head_f)
+        layer.text(((x0 + x1) / 2 - w_ / 2, 928 * s), text, head_f)
+
+    zone_heading(Ly, reg_x0, reg_x1, "THE REGULARS")
 
     repos = list(data["activity"].keys())
     if repos:
-        slot_w = (width - int(360 * s)) // len(repos)
+        slot_w = (reg_x1 - reg_x0) // len(repos)
         y0 = int(1040 * s)
         for i, repo in enumerate(repos):
-            x0 = int(180 * s) + i * slot_w + int(30 * s)
+            x0 = reg_x0 + i * slot_w + int(30 * s)
             acts = data["activity"][repo] or [0]
             Lw.text((x0, y0), repo.upper(), body_f)
             Ly.sparkline(acts, [x0 + 4 * s, y0 + 84 * s, x0 + slot_w - 90 * s, y0 + 168 * s], width=max(3, int(4 * s)))
             note = f"{sum(acts[-7:])} this week"
             last = data["last_commit"].get(repo)
-            if last:
+            # only append the commit message when the slot can show a useful
+            # piece of it — a message truncated to two words is just noise
+            if last and slot_w > 360 * s:
                 note = Ld.truncate(f"{note} — {last['message']}", script_f, slot_w - 110 * s)
             Ld.text((x0 + 4 * s, y0 + 192 * s), note, script_f)
+
+    if pantry:
+        pan_x0, pan_x1 = width - int(780 * s), width - int(180 * s)
+        # vertical separator between the regulars and the pantry shelves
+        Lw.line([(width - int(810 * s), 950 * s), (width - int(810 * s), 1270 * s)],
+                width=max(2, int(3 * s)), wobble=2.4, alpha=150)
+        zone_heading(Lm, pan_x0, pan_x1, "THE PANTRY")
+
+        def shelf(y, label, value, frac=None):
+            Lw.text((pan_x0, y), label, body_f)
+            l_w = Lw.text_len(label, body_f)
+            v_w = Ld.text_len(value, script_f)
+            Ld.dotted_leader(pan_x0 + l_w + 20 * s, pan_x1 - v_w - 24 * s, y + 34 * s, gap=14 * s, r=2 * s)
+            Ld.text((pan_x1 - v_w, y + 10 * s), value, script_f)
+            if frac is not None:
+                # stock below 15% (or a shelf over 85% full) hatches rose
+                hatch = Lr if frac > 0.85 else Ly
+                Lw.stock_bar([pan_x0, y + 58 * s, pan_x1, y + 74 * s], frac,
+                             width=max(2, int(3 * s)), hatch_layer=hatch)
+
+        y = int(996 * s)
+        shelf(y, "MEMORY", f"{pantry['mem_used_gb']:.1f} / {pantry['mem_total_gb']:.0f} GB",
+              pantry["mem_frac"])
+        y += int(88 * s)
+        for disk in pantry["disks"][:2]:
+            shelf(y, disk["label"].upper(), f"{disk['free_gb']:.0f} GB FREE", disk["used_frac"])
+            y += int(88 * s)
+        shelf(y - int(16 * s), "STOVE ON", pantry["uptime"])
 
     # ------------------------------- footer rail: chef's note + refresh
     footer_parts = []

@@ -196,6 +196,20 @@ class ChalkLayer:
             r = width + 2
             self.draw.ellipse([lx - r, ly - r, lx + r, ly + r], fill=alpha)
 
+    def stock_bar(self, box, frac, width=3, hatch_layer=None):
+        """Hand-drawn stock gauge: wobbly outline, diagonal chalk hatching up
+        to `frac`. Pass hatch_layer to hatch in a different colour than the
+        outline (the pantry hatches rose when stock runs low)."""
+        x0, y0, x1, y1 = box
+        self.rect([x0, y0, x1, y1], width=width, wobble=1.6)
+        fill = (hatch_layer or self)
+        fill_w = (x1 - x0) * min(max(frac, 0.0), 1.0)
+        h = y1 - y0
+        x = x0 + 5
+        while x < x0 + fill_w - 3:
+            fill.line([(x, y1 - 3), (x + h * 0.55, y0 + 3)], width=width, wobble=0.8, passes=1)
+            x += 13
+
     def dotted_leader(self, x0, x1, y, alpha=200, gap=14, r=2):
         x = x0
         while x < x1:

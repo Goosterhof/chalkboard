@@ -8,7 +8,13 @@
   ],
   "activity_days": 14,
   "ignore_bot_reviews": true,
-  "refresh_minutes": 10,
+  "refresh_minutes": 3,
+  "pantry": {
+    "enabled": true,
+    "disks": [
+      { "path": "C:\\", "label": "CELLAR C:" }
+    ]
+  },
   "gh_timeout_seconds": 20,
   "output_path": "%LOCALAPPDATA%\\chalkboard\\current.png",
   "log_path": "%LOCALAPPDATA%\\chalkboard\\chalkboard.log",

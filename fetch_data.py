@@ -187,6 +187,45 @@ def get_repo_activity(owner, repo, days=14, timeout_seconds=20):
     return buckets, last
 
 
+def get_machine_specs(pantry_config):
+    """THE PANTRY — the machine's slow-moving stock: memory, disks, uptime.
+    Deliberately no CPU% here: on a board that rechalks every few minutes a
+    CPU number is one stale sample wearing a live gauge's costume. Fast
+    gauges wait for the living board (v3). Returns None (panel skipped) if
+    disabled or psutil is missing."""
+    if pantry_config is not None and not pantry_config.get("enabled", True):
+        return None
+    try:
+        import psutil
+    except ImportError:
+        logging.warning("psutil not installed — the pantry stays shut (pip install -r requirements.txt).")
+        return None
+
+    mem = psutil.virtual_memory()
+    specs = {
+        "mem_used_gb": (mem.total - mem.available) / 2**30,
+        "mem_total_gb": mem.total / 2**30,
+        "mem_frac": mem.percent / 100.0,
+        "disks": [],
+    }
+    for disk in (pantry_config or {}).get("disks", [{"path": "C:\\", "label": "CELLAR C:"}]):
+        try:
+            usage = psutil.disk_usage(disk["path"])
+        except OSError as exc:
+            logging.warning("Pantry disk %s unreadable — skipping: %s", disk.get("path"), exc)
+            continue
+        specs["disks"].append({
+            "label": disk.get("label", disk["path"]),
+            "free_gb": usage.free / 2**30,
+            "total_gb": usage.total / 2**30,
+            "used_frac": usage.percent / 100.0,
+        })
+    up = datetime.now(timezone.utc) - datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc)
+    hours = up.seconds // 3600
+    specs["uptime"] = f"{up.days}d {hours}h" if up.days >= 1 else f"{hours}h {(up.seconds % 3600) // 60}m"
+    return specs
+
+
 def get_kendo_counts(kendo_config, timeout_seconds=20):
     """The Kendo seam — runs the configured command and expects JSON like
     {"plate": 4, "sprint": "S34", "served": 12, "total": 20} on stdout.
@@ -244,5 +283,13 @@ def mock_data():
             "zmuuzn":    {"sha": "892c6a2", "message": "docs(chaos): autopsy report for the Prompt Book restage", "author": "Goosterhof"},
         },
         "kendo": {"plate": 4, "sprint": "S34", "served": 12, "total": 20},
+        "pantry": {
+            "mem_used_gb": 21.3, "mem_total_gb": 32.0, "mem_frac": 0.67,
+            "disks": [
+                {"label": "CELLAR C:", "free_gb": 212.0, "total_gb": 931.0, "used_frac": 0.77},
+                {"label": "ATTIC D:", "free_gb": 48.0, "total_gb": 465.0, "used_frac": 0.92},
+            ],
+            "uptime": "6d 4h",
+        },
         "stamp": "FRI 8 AUG · RECHALKED 16:20",
     }
