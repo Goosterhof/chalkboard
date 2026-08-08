@@ -28,7 +28,9 @@ from fetch_data import (  # noqa: E402
     get_my_open_prs,
     get_repo_activity,
     get_review_requested_prs,
+    mock_bare_data,
     mock_data,
+    mock_loud_data,
 )
 from render import chalk_service_pause, render_dashboard  # noqa: E402
 from set_wallpaper import set_wallpaper  # noqa: E402
@@ -156,7 +158,14 @@ def main():
     state = load_state(state_path)
 
     try:
-        data = mock_data() if "--mock" in sys.argv else collect(config)
+        if "--mock-loud" in sys.argv:      # register stress: 5 candidates vs budget 3
+            data = mock_loud_data()
+        elif "--mock-bare" in sys.argv:    # the empty-bench register
+            data = mock_bare_data()
+        elif "--mock" in sys.argv:
+            data = mock_data()
+        else:
+            data = collect(config)
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         render_dashboard(data, config, output_path)

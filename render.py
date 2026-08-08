@@ -27,6 +27,21 @@ DIM = (172, 174, 168)
 MAX_PRS_PER_SECTION = 3
 DESIGN_H = 1440.0
 
+# --- The register constants (v2.6, chaos #00110 D4) -----------------------
+# Calibrated by the Artisan against the LIVE queues on 2026-08-08, not by
+# feel: bench ages had a clean gap 6.0->10.4 days (a 5-day threshold would
+# have fired on 14 of 16 — a baseline, not a shout); human review-request
+# ages topped out at 5.2 days. Two populations, two thresholds.
+COLD_BENCH_DAYS = 7     # bench PR going cold — sits in the measured gap
+COLD_PASS_DAYS = 4      # review request going cold — the measured tail
+STONE_COLD_DAYS = 14    # a fortnight: the second gap, and the board's own window
+ROT_DAYS = 14           # hidden-overflow rot worth confessing to
+MONSTER_RATIO = 2.0     # last-7 vs prior-7 commits — a big week
+MONSTER_MIN_WEEK = 12   # ratio guard: 3-after-1 is 3.0x and means nothing
+QUIET_WEEK = 0          # exactly zero in seven days — unambiguous, rare
+MAX_SHOUTS = 3          # derived from one day's candidate count; the cycle
+                        # log records candidates so a week of data can retune it
+
 
 def get_primary_screen_size(config):
     try:
@@ -55,6 +70,7 @@ def render_dashboard(data, config, output_path):
     sub_f = load_font(font_dir, "amatic-sc-400", int(54 * s))
     head_f = load_font(font_dir, "amatic-sc-700", int(76 * s))
     body_f = load_font(font_dir, "amatic-sc-700", int(52 * s))
+    big_age_f = load_font(font_dir, "amatic-sc-700", int(70 * s))  # STONE COLD headline
     script_f = load_font(font_dir, "caveat-500", int(36 * s))
 
     board = make_board(width, height)
@@ -93,18 +109,100 @@ def render_dashboard(data, config, output_path):
     row_h = int(116 * s)
     mark_w = int(56 * s)
 
-    def menu_row(x, y, title_text, sub_text, age):
-        title_max = col_w - mark_w - Ld.text_len(age, body_f) - 160 * s
-        title_text = Lw.truncate(title_text.upper(), body_f, title_max)
+    # ------------------- the register: candidates and the shout budget
+    # Every loud move competes for MAX_SHOUTS slots; losers render their
+    # quiet fallback — information never disappears, only volume comes down.
+    bench, the_pass = data["my_prs"], data["review_prs"]
+
+    def rot_pr(prs):
+        hidden = prs[MAX_PRS_PER_SECTION:]
+        if not hidden:
+            return None
+        oldest = max(hidden, key=lambda p: p.get("age_days", 0.0))
+        return oldest if oldest.get("age_days", 0.0) >= ROT_DAYS else None
+
+    def is_monster(acts):
+        week, prior = sum((acts or [])[-7:]), sum((acts or [])[:-7])
+        return week >= MONSTER_MIN_WEEK and week >= MONSTER_RATIO * max(prior, 1)
+
+    candidates = []  # (priority, tiebreak, key)
+    for col_key, prs in (("bench", bench), ("pass", the_pass)):
+        if rot_pr(prs):
+            candidates.append((1, (0 if col_key == "bench" else 1,), ("rot", col_key)))
+    for i, pr in enumerate(bench[:MAX_PRS_PER_SECTION]):
+        a = pr.get("age_days", 0.0)
+        if a >= STONE_COLD_DAYS:
+            candidates.append((2, (-a,), ("cold", "bench", i)))
+        elif a >= COLD_BENCH_DAYS:
+            candidates.append((4, (-a, 0), ("cold", "bench", i)))
+        if pr.get("checks") == "red":
+            candidates.append((3, (-a,), ("red", "bench", i)))
+    for i, pr in enumerate(the_pass[:MAX_PRS_PER_SECTION]):
+        a = pr.get("age_days", 0.0)
+        if a >= COLD_PASS_DAYS:
+            candidates.append((4, (-a, 1), ("cold", "pass", i)))
+    for repo, acts in data["activity"].items():
+        if is_monster(acts):
+            candidates.append((5, (-sum((acts or [])[-7:]),), ("monster", repo)))
+
+    candidates.sort(key=lambda c: (c[0], c[1]))
+    loud = {key for _, _, key in candidates[:MAX_SHOUTS]}
+    demoted = {key for _, _, key in candidates[MAX_SHOUTS:]}
+    # feeds the MAX_SHOUTS retune question: a week of these lines is the data
+    logging.info("Register: %d candidate(s), loud=%s, demoted=%s",
+                 len(candidates), sorted(loud), sorted(demoted))
+
+    def menu_row(x, y, pr, sub_text, sub_rose, col_key, idx):
+        a = pr.get("age_days", 0.0)
+        cold = a >= (COLD_BENCH_DAYS if col_key == "bench" else COLD_PASS_DAYS)
+        stone_loud = a >= STONE_COLD_DAYS and ("cold", col_key, idx) in loud
+        cold_loud = cold and ("cold", col_key, idx) in loud
+        red_loud = ("red", col_key, idx) in loud
+
+        age = pr["age"]
+        age_font = big_age_f if stone_loud else body_f
+        age_layer = Lr if cold else Ld  # GOING COLD: the price turns rose
+        age_w = age_layer.text_len(age, age_font)
+
+        title_max = col_w - mark_w - age_w - 160 * s
+        title_text = Lw.truncate(pr["title"].upper(), body_f, title_max)
         Lw.text((x + mark_w, y), title_text, body_f)
         t_w = Lw.text_len(title_text, body_f)
-        age_w = Ld.text_len(age, body_f)
-        Ld.dotted_leader(x + mark_w + t_w + 24 * s, x + col_w - age_w - 30 * s, y + 40 * s, gap=14 * s, r=2 * s)
-        Ld.text((x + col_w - age_w, y), age, body_f)
-        Ld.text((x + mark_w + 6 * s, y + 58 * s), sub_text, script_f)
 
-    def overflow_note(x, y, hidden):
-        if hidden > 0:
+        if red_loud:
+            # EIGHTY-SIXED: the strike goes through the leader, not the title
+            Lr.line([(x + mark_w + t_w + 24 * s, y + 40 * s), (x + col_w - age_w - 30 * s, y + 40 * s)],
+                    width=max(3, int(4 * s)), wobble=2.6)
+        else:
+            Ld.dotted_leader(x + mark_w + t_w + 24 * s, x + col_w - age_w - 30 * s, y + 40 * s,
+                             gap=14 * s, r=2 * s)
+
+        ax = x + col_w - age_w
+        age_layer.text((ax, y - 9 * s if stone_loud else y), age, age_font)
+        if cold_loud:
+            # the circled price — a circle on this board only ever means
+            # "this one is waiting on you"
+            box = ([ax - 24 * s, y - 8 * s, ax + age_w + 24 * s, y + 70 * s] if stone_loud
+                   else [ax - 22 * s, y + 2 * s, ax + age_w + 22 * s, y + 64 * s])
+            Lr.circle_scribble(box, laps=2, width=max(2, int(3 * s)), alpha=230)
+
+        (Lr if sub_rose else Ld).text((x + mark_w + 6 * s, y + 58 * s), sub_text, script_f)
+
+    def overflow_note(x, y, prs, col_key):
+        hidden = len(prs) - MAX_PRS_PER_SECTION
+        if hidden <= 0:
+            return
+        rot = rot_pr(prs)
+        if rot:
+            # WHAT'S ROTTING OFF THE BOARD — the one thing the newest-first
+            # sort makes structurally invisible gets its confession here
+            note = f"…and {hidden} more — the oldest has been sitting {rot['age']}"
+            layer = Lr if ("rot", col_key) in loud else Ld
+            layer.text((x + mark_w, y), note, script_f)
+            if ("rot", col_key) in loud:
+                Lr.underline(x + mark_w, x + mark_w + layer.text_len(note, script_f), 888 * s,
+                             width=max(2, int(3 * s)), double=False)
+        else:
             Ld.text((x + mark_w, y), f"…and {hidden} more on the specials board", script_f)
 
     # left: authored PRs, with check-status chalk marks
@@ -112,7 +210,13 @@ def render_dashboard(data, config, output_path):
     Ly.text((col_lx, y - 60 * s), "FRESH FROM THE BENCH", head_f)
     Ly.underline(col_lx, col_lx + 560 * s, y + 34 * s, width=max(2, int(4 * s)), double=False)
     y += int(74 * s)
-    for pr in data["my_prs"][:MAX_PRS_PER_SECTION]:
+    if not bench:
+        # BENCH IS BARE — a fact, not a celebration: white says so, flatly
+        bw = Lw.text_len("BENCH IS BARE", head_f)
+        Lw.text((col_lx + col_w / 2 - bw / 2, 508 * s), "BENCH IS BARE", head_f)
+        nw = Ld.text_len("nothing of yours in flight", script_f)
+        Ld.text((col_lx + col_w / 2 - nw / 2, 604 * s), "nothing of yours in flight", script_f)
+    for i, pr in enumerate(bench[:MAX_PRS_PER_SECTION]):
         checks = pr.get("checks", "none")
         if checks == "green":
             Lm.tick(col_lx, y + 10 * s, size=32 * s, width=max(3, int(5 * s)))
@@ -123,20 +227,29 @@ def render_dashboard(data, config, output_path):
         elif checks == "unknown":  # the board admits what it couldn't read
             Ld.text((col_lx + 8 * s, y), "?", body_f)
         sub = f"{pr['repo']} #{pr['number']}" + (f" — {pr['review']}" if pr.get("review") else "")
-        menu_row(col_lx, y, pr["title"], sub, pr["age"])
+        menu_row(col_lx, y, pr, sub, checks == "red", "bench", i)
         y += row_h
-    overflow_note(col_lx, y, len(data["my_prs"]) - MAX_PRS_PER_SECTION)
+    overflow_note(col_lx, y, bench, "bench")
 
     # right: review requests
     y = int(420 * s)
     Lr.text((col_rx, y - 60 * s), "WAITING ON YOUR EYES", head_f)
     Lr.underline(col_rx, col_rx + 560 * s, y + 34 * s, width=max(2, int(4 * s)), double=False)
     y += int(74 * s)
-    for pr in data["review_prs"][:MAX_PRS_PER_SECTION]:
+    if not the_pass:
+        # KITCHEN'S CLEAR — the good-news register, framed in mint
+        Lm.rect([col_rx + 30 * s, 476 * s, col_rx + col_w - 30 * s, 688 * s],
+                width=max(3, int(5 * s)), wobble=3.2, alpha=210)
+        box_cx = col_rx + col_w / 2
+        kw = Lm.text_len("KITCHEN'S CLEAR", head_f)
+        Lm.text((box_cx - kw / 2, 508 * s), "KITCHEN'S CLEAR", head_f)
+        nw = Lm.text_len("NOTHING WAITING ON YOU", body_f)
+        Lm.text((box_cx - nw / 2, 604 * s), "NOTHING WAITING ON YOU", body_f)
+    for i, pr in enumerate(the_pass[:MAX_PRS_PER_SECTION]):
         sub = f"{pr['repo']} #{pr['number']} — {pr['author']}"
-        menu_row(col_rx, y, pr["title"], sub, pr["age"])
+        menu_row(col_rx, y, pr, sub, False, "pass", i)
         y += row_h
-    overflow_note(col_rx, y, len(data["review_prs"]) - MAX_PRS_PER_SECTION)
+    overflow_note(col_rx, y, the_pass, "pass")
 
     # --------------------------------------- the regulars + the pantry
     div_y = 904 * s
@@ -160,19 +273,47 @@ def render_dashboard(data, config, output_path):
         for i, repo in enumerate(repos):
             x0 = reg_x0 + i * slot_w + int(30 * s)
             acts = data["activity"][repo] or [0]
-            Lw.text((x0, y0), repo.upper(), body_f)
-            Ly.sparkline(acts, [x0 + 4 * s, y0 + 84 * s, x0 + slot_w - 90 * s, y0 + 168 * s], width=max(3, int(4 * s)))
-            # "318/wk — fix: correct timezone…", word-boundary truncated; the
-            # message tail rides along only when at least one whole word of it
-            # fits (chaos #00110 D1: a fixed threshold quietly ate the tail on
-            # every resolution once the pantry took its share of the width)
-            note = f"{sum(acts[-7:])}/wk"
+            week = sum(acts[-7:])
+            spark_box = [x0 + 4 * s, y0 + 84 * s, x0 + slot_w - 90 * s, y0 + 168 * s]
             last = data["last_commit"].get(repo)
-            if last:
-                fitted = Ld.truncate_words(f"{note} — {last['message']}", script_f, slot_w - 60 * s)
-                if len(fitted) >= len(note) + 6:
-                    note = fitted
-            Ld.text((x0 + 4 * s, y0 + 192 * s), note, script_f)
+
+            if week == QUIET_WEEK:
+                # HASN'T BEEN IN — a quieting move: the regular who stopped
+                # coming in isn't erased, they're written faint
+                Ld.text((x0, y0), repo.upper(), body_f)
+                Ld.sparkline(acts, spark_box, width=max(3, int(4 * s)))
+                Ld.text((x0 + 4 * s, y0 + 192 * s), "hasn't been in", script_f)
+                continue
+
+            monster = is_monster(acts)
+            Lw.text((x0, y0), repo.upper(), body_f)
+            # a big week thickens the trace even when demoted below the budget
+            Ly.sparkline(acts, spark_box,
+                         width=max(4, int(6 * s)) if monster else max(3, int(4 * s)))
+
+            if ("monster", repo) in loud:
+                # BIG WEEK — the number goes up in the big hand. No circle:
+                # circles mean "waiting on you", and this is the opposite.
+                count = str(week)
+                Ly.text((x0 + 4 * s, y0 + 184 * s), count, body_f)
+                count_w = Ly.text_len(count, body_f)
+                tail = "/wk"
+                if last:
+                    fitted = Ld.truncate_words(f"/wk — {last['message']}", script_f,
+                                               slot_w - 60 * s - count_w)
+                    if len(fitted) >= 10:
+                        tail = fitted
+                Ld.text((x0 + 4 * s + count_w + 10 * s, y0 + 192 * s), tail, script_f)
+            else:
+                # "318/wk — fix: correct timezone…", word-boundary truncated;
+                # the message tail rides along only when at least one whole
+                # word of it fits (chaos #00110 D1)
+                note = f"{week}/wk"
+                if last:
+                    fitted = Ld.truncate_words(f"{note} — {last['message']}", script_f, slot_w - 60 * s)
+                    if len(fitted) >= len(note) + 6:
+                        note = fitted
+                Ld.text((x0 + 4 * s, y0 + 192 * s), note, script_f)
 
     if pantry:
         pan_x0, pan_x1 = width - int(780 * s), width - int(180 * s)

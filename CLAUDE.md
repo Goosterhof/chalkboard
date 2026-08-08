@@ -198,6 +198,36 @@ somewhere inspectable and look at pixels.
 - Ages are humanized (`5h`, `2d`) from `createdAt` — menu prices, not
   timestamps.
 
+## The Registers (v2.6)
+
+The board raises its voice — chaos #00110 D4, designed by the Artisan
+against the *measured* live queues (the Monkey's "~5 days" would have
+fired on 14 of 16 bench PRs; the real thresholds sit in the gaps of the
+age distribution, and the two columns are different populations). Full
+spec + restraint ledger: `zmuuzn/documents/design-systems/`
+`chalkboard-register-spec.md`. The shape:
+
+- **Eight named moves**, mechanical triggers only: GOING COLD (rose age +
+  circle scribble; 7d bench / 4d pass), STONE COLD (14d — the age sets in
+  the big hand), EIGHTY-SIXED (red CI strikes the leader, never the
+  title), KITCHEN'S CLEAR (empty review column, mint frame), BENCH IS
+  BARE (white — a fact, not a celebration), HASN'T BEEN IN (0 commits in
+  7 days — the slot demotes to dim), BIG WEEK (≥12 and ≥2× prior — the
+  count in the big yellow hand), ROT OFF THE BOARD (hidden overflow's
+  oldest ≥14d — the note confesses "the oldest has been sitting 82d").
+- **A shout budget** — `MAX_SHOUTS = 3`, priority ROT → STONE COLD → RED
+  → COLD → BIG WEEK; losers render quiet fallbacks (rose without circle,
+  stroke bump without count, dim confession) — information never
+  disappears, only volume comes down. Filling a blank zone or removing
+  ink is free.
+- **One primitive, one meaning** — a circle always means *waiting on
+  you*; it decorates nothing else.
+- Every cycle logs `Register: N candidate(s), loud=…, demoted=…` — a week
+  of that answers whether MAX_SHOUTS=3 throttles ordinary days (the one
+  constant derived from a single day's data).
+- Register-stress fixtures: `--mock-loud` (5 candidates vs budget 3, an
+  empty pass, a silent regular, rot in the tail) and `--mock-bare`.
+
 ## The Living Board (v3 — written down, not started)
 
 The investor asked what a Windows background can actually *be* (2026-08-08).

@@ -52,6 +52,16 @@ def humanize_age(iso_stamp):
     return f"{max(delta.seconds // 60, 1)}m"
 
 
+def age_days(iso_stamp):
+    """Float age in days — the register triggers compare against this, never
+    against the humanized string (which loses hours and rounds down)."""
+    try:
+        then = datetime.fromisoformat(iso_stamp.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return 0.0
+    return (datetime.now(timezone.utc) - then).total_seconds() / 86400
+
+
 def _summarize_checks(rollup):
     """statusCheckRollup contexts -> green / red / pending / none."""
     if not rollup:
@@ -116,6 +126,7 @@ def get_my_open_prs(timeout_seconds=20, detail_cap=4):
             "number": pr.get("number", 0),
             "title": pr.get("title", ""),
             "age": humanize_age(pr.get("createdAt", "")),
+            "age_days": age_days(pr.get("createdAt", "")),
             "checks": checks,
             "review": review,
         })
@@ -145,6 +156,7 @@ def get_review_requested_prs(timeout_seconds=20, ignore_bots=True):
             "title": pr.get("title", ""),
             "author": pr.get("author", {}).get("login", "?"),
             "age": humanize_age(pr.get("createdAt", "")),
+            "age_days": age_days(pr.get("createdAt", "")),
         }
         for pr in raw
     ]
@@ -260,19 +272,19 @@ def mock_data():
     return {
         "my_prs": [
             {"repo": "kendo", "number": 412, "title": "Add sprint velocity chart to the report tool",
-             "age": "2d", "checks": "green", "review": "plated"},
+             "age": "2d", "age_days": 2.1, "checks": "green", "review": "plated"},
             {"repo": "zmuuzn", "number": 108, "title": "Graft The Chalkboard gadget",
-             "age": "5h", "checks": "unknown", "review": "still on the pass"},
+             "age": "5h", "age_days": 0.2, "checks": "unknown", "review": "still on the pass"},
             {"repo": "war-room", "number": 51, "title": "Territory clock drift fix for the general's map",
-             "age": "1d", "checks": "red", "review": "sent back"},
+             "age": "1d", "age_days": 1.2, "checks": "red", "review": "sent back"},
         ],
         "review_prs": [
             {"repo": "emmie-app", "number": 233, "title": "Cohort export: stream instead of buffering",
-             "author": "jvries", "age": "4h"},
+             "author": "jvries", "age": "4h", "age_days": 0.17},
             {"repo": "kendo", "number": 415, "title": "Label sync race on bulk update",
-             "author": "rjansen", "age": "1d"},
+             "author": "rjansen", "age": "1d", "age_days": 1.1},
             {"repo": "ubl-genie", "number": 88, "title": "Invoice line rounding under reverse charge",
-             "author": "mpostma", "age": "3d"},
+             "author": "mpostma", "age": "3d", "age_days": 3.2},
         ],
         "activity": {
             "emmie-app": [3, 5, 2, 0, 0, 4, 6, 3, 1, 0, 2, 5, 4, 2],
@@ -299,3 +311,36 @@ def mock_data():
         },
         "stamp": "SAT 8 AUG · RECHALKED 16:20",
     }
+
+
+def mock_loud_data():
+    """Register-stress fixture (--mock-loud): five shout candidates against a
+    budget of three, an empty pass, a silent regular, and a rotting overflow
+    tail. Exists so the quiet fallbacks can be seen, not just believed."""
+    data = mock_data()
+    data["my_prs"] = [
+        {"repo": "war-room", "number": 12, "title": "Rebuild the territory clock from the survey pillars",
+         "age": "82d", "age_days": 82.0, "checks": "green", "review": "still on the pass"},
+        {"repo": "kendo", "number": 431, "title": "Sprint report drilldown by lane",
+         "age": "1d", "age_days": 1.3, "checks": "red", "review": "sent back"},
+        {"repo": "zmuuzn", "number": 96, "title": "Wire the parlour stage into the lab nav",
+         "age": "9d", "age_days": 9.4, "checks": "green", "review": "still on the pass"},
+        # the hidden tail — rot the overflow note has to confess to
+        {"repo": "ubl-genie", "number": 71, "title": "Reverse-charge edge cases", "age": "30d", "age_days": 30.2,
+         "checks": "none", "review": ""},
+        {"repo": "kendo", "number": 388, "title": "Board filters", "age": "16d", "age_days": 16.0,
+         "checks": "none", "review": ""},
+        {"repo": "zmuuzn", "number": 80, "title": "Pulse compaction", "age": "6d", "age_days": 6.1,
+         "checks": "none", "review": ""},
+    ]
+    data["review_prs"] = []  # KITCHEN'S CLEAR
+    data["activity"]["emmie-app"] = [1, 1, 1, 1, 2, 1, 1, 3, 4, 3, 4, 3, 4, 3]  # 8 -> 24: a big week
+    data["activity"]["zmuuzn"] = [0] * 14  # hasn't been in
+    return data
+
+
+def mock_bare_data():
+    """--mock-bare: an empty bench (a fact, not a celebration)."""
+    data = mock_data()
+    data["my_prs"] = []
+    return data

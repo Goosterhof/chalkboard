@@ -170,6 +170,27 @@ class ChalkLayer:
             bb = (b[0] + dx * 0.012, b[1] + dy * 0.012)
             self.line([aa, bb], width=width, wobble=wobble, alpha=alpha)
 
+    def circle_scribble(self, box, laps=2, width=3, alpha=255):
+        """A hand looping around something, `laps` times with overshoot. Each
+        lap's centre drifts a little — that drift, not the radius jitter, is
+        what makes it read as a scribble instead of an ellipse. On this board
+        a circle has exactly one meaning: *this one is waiting on you*."""
+        x0, y0, x1, y1 = box
+        rx, ry = (x1 - x0) / 2, (y1 - y0) / 2
+        cx, cy = x0 + rx, y0 + ry
+        pts = []
+        start = self.rng.uniform(0, math.tau)
+        total = math.tau * laps + math.radians(25 * laps)  # ~25° overshoot per lap
+        steps = max(12, int(total / math.radians(12)))
+        ox = oy = 0.0
+        for i in range(steps + 1):
+            a = start + total * i / steps
+            if i % max(1, steps // laps) == 0:  # new lap, new centre drift
+                ox, oy = self.rng.uniform(-2.5, 2.5), self.rng.uniform(-2.5, 2.5)
+            wob = 1 + self.rng.uniform(-0.03, 0.03)
+            pts.append((cx + ox + math.cos(a) * rx * wob, cy + oy + math.sin(a) * ry * wob))
+        self.line(pts, width=width, wobble=1.0, alpha=alpha, passes=2)
+
     def underline(self, x0, x1, y, width=5, alpha=255, double=True):
         self.line([(x0, y), (x1, y)], width=width, wobble=2.8, alpha=alpha)
         if double:
